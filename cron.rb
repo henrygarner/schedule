@@ -29,41 +29,53 @@ class Cron
     Time.gm @cursor[4], @cursor[3], @cursor[2], @cursor[1], @cursor[0]
   end
   
-  def before(time)
+  def before!(time)
     self.cursor = time
     self.previous
   end
   
-  def after(time)
+  def after!(time)
     self.cursor = time
     self.next
   end
   
-  def previous
+  def previous!
     scan(:down)
     cursor
   end
   
-  def next
+  def previous
+    cursor = self.cursor
+    result = previous!
+    self.cursor = cursor
+    result
+  end
+  
+  def next!
     scan(:up, 0, true)
     cursor
   end
   
+  def next
+    cursor = self.cursor
+    result = next!
+    self.cursor = cursor
+    result
+  end
+  
   def between(time, end_time)
-    self.cursor, triggers = time, []
+    cursor_before = self.cursor
+    self.cursor, matches = time, []
     loop do
       cursor = self.next
-      cursor > end_time ? break : triggers << cursor
+      cursor > end_time ? break : matches << cursor
     end
-    triggers
+    self.cursor = cursor_before
+    matches
   end
   
   def upto!(end_time)
     yield(cursor) while self.next <= end_time
-  end
-  
-  def downto!(end_time)
-    yield(cursor) while self.previous >= end_time
   end
 
   def to_s
@@ -72,20 +84,21 @@ class Cron
 
   private
   
-   # Recursive function to resolve time array to the next or previous match.
+   # Recursive function to resolve cursor to the next or previous match.
    # An array is used rather than a Time object for performance reasons.
    # Starting at level 0 (minutes), function works its way up to level 4 (years).
    
-   # If a the current value at a given lavel matches, no action is taken
+   # If a the current value at a given level matches, no action is taken
    # and the function calls itself one level higher.
    # If a match is found within the current frame (eg the same day if 
    # searching for hours), the function replaces the value for the match
    # and calls itself one level higher as before.
    # If no match is found within the current frame (eg hours will only match
-   # in a subsequent or prior day), then the function calls itself with
-   # 'should rollover' set to true. This causes the value one level up
-   # to be set to the next or previous value, and all finer-grained quantities
-   # (eg hours and minutes) are set to their minimum or maximum value.
+   # in a subsequent or prior day), then the function calls itself 
+   # one level higher with 'should rollover' set to true.
+   # This causes the value one level up to be set to the next or previous value,
+   # and all finer-grained quantities (eg hours and minutes) are
+   # set to their minimum or maximum value.
    # A match is always found at the year level and the function returns.
    
    # If months or years (level 3 or 4) are altered then the function
