@@ -2,9 +2,9 @@ require 'date'
 
 class Cron
   
-  attr_reader :weekdays, :monthdays
+  attr_reader :time
   
-  def initialize(fields)
+  def initialize(fields, time = time_without_seconds)
     @fields     = fields
     array       = fields.split(' ')
     raise 'Cron expression does not have 5 fields' if array.size != 5
@@ -15,94 +15,100 @@ class Cron
     @months     = Field.new array[3], 1..12
     @weekdays   = Field.new array[4], 0..6
     
-    self.cursor = Time.now
+    self.cursor = self.time = time_without_seconds
     
     raise 'Cron expression will never match' if [1,3,5,7,8,10,12].all? { |month| !@months.values.include? month } and @monthdays.values == [31]
     raise 'Cron expression will never match' if @months.values == [2] and @monthdays.values.all? { |day| day > 29 }
   end
   
-  def cursor=(time)
-    @cursor = time.to_a[1..5]
-  end
-  
-  def cursor
-    Time.gm @cursor[4], @cursor[3], @cursor[2], @cursor[1], @cursor[0]
-  end
-  
-  def before!(time)
-    self.cursor = time
-    self.previous!
-  end
-  
-  def after!(time)
-    self.cursor = time
-    self.next!
-  end
-  
-  def previous!
-    scan(:down)
-    cursor
-  end
-  
-  def next!
-    scan(:up, 0, true)
-    cursor
+  def matches?(time = time_without_seconds)
+    self.cursor, before_scan = time, cursor_array
+    scan! :ignore_current => false
+    cursor_array == before_scan
   end
   
   def before(time)
-    cursor = self.cursor
-    result = before!
-    self.cursor = cursor
-    result
+    self.cursor = time
+    self.previous
   end
   
   def after(time)
-    cursor = self.cursor
-    result = after!
-    self.cursor = cursor
-    result
+    self.cursor = time
+    self.next
   end
-    
-  def previous
-    cursor = self.cursor
-    result = previous!
-    self.cursor = cursor
-    result
+  
+  def after_now
+    after time_without_seconds
+  end
+  
+  def before_now
+    before time_without_seconds
+  end
+  
+  def matches_now?
+    matches? time_without_seconds
   end
   
   def next
-    cursor = self.cursor
-    result = next!
-    self.cursor = cursor
-    result
+    self.cursor = time
+    scan! :direction => :up, :ignore_current => true
+    cursor
+  end
+  
+  def previous
+    self.cursor = time
+    scan! :direction => :down
+    cursor
   end
   
   def between(time, end_time)
-    cursor_before = self.cursor
-    self.cursor, matches = time, []
+    time, end_time = [time, end_time].sort
+    self.time = time
+    matches = [(time if matches?(time))].compact
     loop do
-      cursor = self.next!
-      cursor > end_time ? break : matches << cursor
+      next!
+      self.time > end_time ? break : matches << self.time
     end
-    self.cursor = cursor_before
     matches
   end
   
-  def upto!(end_time)
-    yield(cursor) while self.next! <= end_time
+  def time=(time)
+    @time = time_without_seconds time
   end
-
+  
+  def next!
+    self.time = self.next
+  end
+  
   def to_s
     @fields
   end
 
   private
   
+  attr_reader :weekdays, :monthdays
+  
+  def time_without_seconds(time = Time.now)
+    time - time.sec
+  end
+  
+  def cursor
+    Time.gm @cursor_array[4], @cursor_array[3], @cursor_array[2], @cursor_array[1], @cursor_array[0]
+  end
+  
+  def cursor=(time)
+    @cursor_array = time.to_a[1..5]
+  end
+  
+  def cursor_array
+    @cursor_array
+  end
+  
    # Recursive function to resolve cursor to the next or previous match.
    # An array is used rather than a Time object for performance reasons.
    # Starting at level 0 (minutes), function works its way up to level 4 (years).
    
-   # If a the current value at a given level matches, no action is taken
+   # If the current value at a given level matches, no action is taken
    # and the function calls itself one level higher.
    # If a match is found within the current frame (eg the same day if 
    # searching for hours), the function replaces the value for the match
@@ -121,22 +127,31 @@ class Cron
    # This is accomplished with [level + 1, 2].min
 
    # level 0 = minutes, 1 = hours, 2 = days, 3 = months, 4 = years
-   def scan!(direction = :up, level = 0, should_rollover = false)
+   def scan!(options = {})
+     direction      = options[:direction] || :up
+     level          = options[:level].to_i
+     ignore_current = options[:ignore_current]
      
-     matches = time_methods[level].call
-     matches.reverse! unless direction == :up
+     return if level > 4
+     
      comparison, rollover = (direction == :up ? ['>','min'] : ['<','max'])
+     matches              = time_methods[level].call
+     matches = matches.reverse unless direction == :up
      
-     if !matches.include?(@cursor[level]) or should_rollover
-       if found = matches.detect { |is| is.send comparison, @cursor[level] }
-         @cursor[level] = found
-         (0...level).each { |i| @cursor[i] = time_methods[i].call.send rollover }
-         scan! direction, [level + 1, 2].min
+     if ignore_current or not matches.include? cursor_array[level]
+       if found = matches.detect { |is| is.send comparison, cursor_array[level] }
+         
+         cursor_array[level] = found
+         # We set the cursor in reverse order so that months and years are altered first,
+         # since the days method will need to use these new values to calculate its response.
+         (0...level).to_a.reverse.each { |i| cursor_array[i] = time_methods[i].call.send rollover }
+         
+         scan! options.merge(:level => level + 1, :ignore_current => false)
        else
-         scan! direction, level + 1, true
+         scan! options.merge(:level => level + 1, :ignore_current => true)
        end
      else
-       scan! direction, level + 1 if level < 4
+       scan! options.merge(:level => level + 1, :ignore_current => false)
      end
    end
 
@@ -172,19 +187,19 @@ class Cron
    # With these two facts we can construct an array of matching calendar days applying the logic given above.
 
    def days
-     first_day = Date.civil @cursor[4], @cursor[3]
+     first_day = Date.civil cursor_array[4], cursor_array[3]
      last_day = ((first_day >> 1) - 1).day
-     weekday_adjustment = ((first_day.wday - 1) % 7)
+     weekday_adjustment = 1 - first_day.wday
      
-     [  ((0..5).collect do |week_number|
+     [  ([0,7,14,21,28].collect do |week_adjustment|
        
-        # Loop through five weeks turning the weekdays into calendar days by adding (week_number * 7)
-        # and adjusting with the weekday_adjustment. weekday_adjustment is 0 to 6 depending if the first weekday
+        # Loop through weeks turning the weekdays into calendar days by adding the week_adjustment
+        # and weekday_adjustment. weekday_adjustment is 1 to -5 depending if the first weekday
         # of the month is Monday to Sunday respectively. Where month begins on Monday, no adjustment is needed
         # since week day 1 is also calendar day 1. If month begins on Tuesday, adjustment is -1
         # since week day 2 is calendar day 1 etc.
         
-          weekdays.values.collect { |day| (week_number * 7) + day - weekday_adjustment }
+          weekdays.values.collect { |day| (day + week_adjustment + weekday_adjustment) % 35 }
         end.flatten.select { |day| day >= 1 and day <= last_day } unless not monthdays.wildcard and weekdays.wildcard),
         
         (monthdays.values.select { |day| day >= 1 and day <= last_day } unless not weekdays.wildcard and monthdays.wildcard)
@@ -192,7 +207,7 @@ class Cron
    end
 
    def years
-     [@cursor[4] - 1, @cursor[4], @cursor[4] + 1]
+     [cursor_array[4] - 1, cursor_array[4], cursor_array[4] + 1]
    end
   
   def time_methods

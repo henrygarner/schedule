@@ -1,0 +1,55 @@
+h2. Abstract
+
+Cron is a Ruby class which encapsulates a repeating schedule. Objects are initialized with a "Cron expression":http://en.wikipedia.org/wiki/Cron#crontab_syntax. Once initialized, the object can be used to explore the schedule forwards and backwards in time.
+
+h2. Examples
+
+<pre>
+	<code>
+		>> schedule = Cron.new '0 8-17 1 * FRI'
+	</code>
+</pre>
+
+creates a new Cron object which will match each hour between 8am and 5pm every Friday or 1st of the month.
+
+<pre>
+	<code>
+		>> schedule.before_now
+		=> Fri Nov 21 17:00:00 UTC 2008
+		
+		>> schedule.after_now
+		=> Fri Nov 28 08:00:00 UTC 2008
+		
+		>> schedule.between 1.month.ago, Time.now
+		=> [Fri Oct 31 08:00:00 UTC 2008, Fri Oct 31 09:00:00 UTC 2008, Fri Oct 31 10:00:00 UTC 2008 ... ]
+		
+				
+	</code>
+</pre>
+
+Each Cron object maintains an internal reference time. This is set to the creation time time by default but can be overridden at initialization or with the time= method.
+
+<pre>
+	<code>
+		>> schedule = Cron.new '0 8-17 1 * FRI', 2.months.ago
+		
+		>> schedule.next
+		=> Fri Sep 26 08:00:00 UTC 2008
+		
+		>> schedule.previous
+		=> Fri Sep 19 17:00:00 UTC 2008
+		
+		>> schedule.time = 5.months.ago
+
+		>> schedule.previous
+		=> Fri Jun 20 17:00:00 UTC 2008
+	</code>
+</pre>
+
+h3. Author
+
+"Henry Garner":http://www.quantedit.co.uk
+
+h3. Licence
+
+"MIT":http://www.opensource.org/licenses/mit-license.php
