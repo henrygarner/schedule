@@ -31,12 +31,12 @@ class Cron
   
   def before!(time)
     self.cursor = time
-    self.previous
+    self.previous!
   end
   
   def after!(time)
     self.cursor = time
-    self.next
+    self.next!
   end
   
   def previous!
@@ -44,16 +44,30 @@ class Cron
     cursor
   end
   
+  def next!
+    scan(:up, 0, true)
+    cursor
+  end
+  
+  def before(time)
+    cursor = self.cursor
+    result = before!
+    self.cursor = cursor
+    result
+  end
+  
+  def after(time)
+    cursor = self.cursor
+    result = after!
+    self.cursor = cursor
+    result
+  end
+    
   def previous
     cursor = self.cursor
     result = previous!
     self.cursor = cursor
     result
-  end
-  
-  def next!
-    scan(:up, 0, true)
-    cursor
   end
   
   def next
@@ -67,7 +81,7 @@ class Cron
     cursor_before = self.cursor
     self.cursor, matches = time, []
     loop do
-      cursor = self.next
+      cursor = self.next!
       cursor > end_time ? break : matches << cursor
     end
     self.cursor = cursor_before
@@ -75,7 +89,7 @@ class Cron
   end
   
   def upto!(end_time)
-    yield(cursor) while self.next <= end_time
+    yield(cursor) while self.next! <= end_time
   end
 
   def to_s
@@ -107,7 +121,7 @@ class Cron
    # This is accomplished with [level + 1, 2].min
 
    # level 0 = minutes, 1 = hours, 2 = days, 3 = months, 4 = years
-   def scan(direction = :up, level = 0, should_rollover = false)
+   def scan!(direction = :up, level = 0, should_rollover = false)
      
      matches = time_methods[level].call
      matches.reverse! unless direction == :up
@@ -117,12 +131,12 @@ class Cron
        if found = matches.detect { |is| is.send comparison, @cursor[level] }
          @cursor[level] = found
          (0...level).each { |i| @cursor[i] = time_methods[i].call.send rollover }
-         scan direction, [level + 1, 2].min
+         scan! direction, [level + 1, 2].min
        else
-         scan direction, level + 1, true
+         scan! direction, level + 1, true
        end
      else
-       scan direction, level + 1 if level < 4
+       scan! direction, level + 1 if level < 4
      end
    end
 
