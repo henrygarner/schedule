@@ -1,13 +1,14 @@
 require 'date'
 
-class Cron
+class Schedule
   
-  attr_reader :time
+  attr_reader :reference, :expression
   
-  def initialize(fields, time = time_without_seconds)
-    @fields     = fields
-    array       = fields.split(' ')
-    raise 'Cron expression does not have 5 fields' if array.size != 5
+  def initialize(expression, time = time_without_seconds)
+    @expression = expression
+    array       = expression.split(' ')
+    
+    raise 'expression does not have 5 fields' if array.size != 5
     
     @minutes    = Field.new array[0], 0..59
     @hours      = Field.new array[1], 0..23
@@ -15,26 +16,26 @@ class Cron
     @months     = Field.new array[3], 1..12
     @weekdays   = Field.new array[4], 0..6
     
-    self.cursor = self.time = time_without_seconds
+    raise 'expression will never match' if weekdays.wildcard and [1,3,5,7,8,10,12].all? { |month| !months.include? month } and monthdays == [31]
+    raise 'expression will never match' if weekdays.wildcard and months == [2] and monthdays.all? { |day| day > 29 }
     
-    raise 'Cron expression will never match' if [1,3,5,7,8,10,12].all? { |month| !@months.values.include? month } and @monthdays.values == [31]
-    raise 'Cron expression will never match' if @months.values == [2] and @monthdays.values.all? { |day| day > 29 }
+    self.reference = time
   end
   
   def matches?(time = time_without_seconds)
-    self.cursor, before_scan = time, cursor_array
-    scan! :ignore_current => false
-    cursor_array == before_scan
+    time.to_a[1..5] == before.to_a[1..5]
   end
   
   def before(time)
     self.cursor = time
-    self.previous
+    scan! :direction => :down
+    cursor
   end
   
   def after(time)
     self.cursor = time
-    self.next
+    scan! :direction => :up, :ignore_current => true
+    cursor
   end
   
   def after_now
@@ -50,38 +51,35 @@ class Cron
   end
   
   def next
-    self.cursor = time
-    scan! :direction => :up, :ignore_current => true
-    cursor
+    after reference
   end
   
   def previous
-    self.cursor = time
-    scan! :direction => :down
-    cursor
+    before reference
+  end
+
+  def each
+    self.cursor = reference
+    yield cursor if matches? cursor
+    loop { yield next! }
   end
   
-  def between(time, end_time)
-    time, end_time = [time, end_time].sort
-    self.time = time
-    matches = [(time if matches?(time))].compact
-    loop do
-      next!
-      self.time > end_time ? break : matches << self.time
-    end
+  def while
+    each { |time| break unless yield time }
+  end
+  
+  def upto(end_time)
+    matches = []
+    self.while { |time| matches << time if time <= end_time }
     matches
   end
   
-  def time=(time)
-    @time = time_without_seconds time
-  end
-  
   def next!
-    self.time = self.next
+    self.reference = self.next
   end
   
-  def to_s
-    @fields
+  def reference=(time)
+    @reference = time_without_seconds time
   end
 
   private
@@ -215,9 +213,11 @@ class Cron
   end
   
   class Field
-    include Enumerable
     WEEKDAYS = %w(SUN MON TUE WED THU FRI SAT)
+    
+    include Enumerable
     attr_reader :values, :wildcard
+    
     def initialize(field, range)
       @wildcard = false
       
@@ -240,7 +240,6 @@ class Cron
       
       raise 'field out of range' unless @values.all? { |value| range.include? value }
     end
-
   end
 
 end
