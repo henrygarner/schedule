@@ -23,8 +23,9 @@ class Schedule
   end
   
   def matches?(time = time_without_seconds)
-    time.to_a[1..5] == before.to_a[1..5]
+    time.to_a[1..5] == before(time).to_a[1..5]
   end
+  alias_method :===, :matches?
   
   def before(time)
     self.cursor = time
@@ -69,11 +70,15 @@ class Schedule
   end
   
   def upto(end_time)
-    matches = []
-    self.while { |time| matches << time if time <= end_time }
-    matches
+    each { |time| time <= end_time ? yield(time) : break }
   end
   
+  def timetable_upto(end_time)
+    timetable = []
+    upto(end_time) { |time| timetable << time }
+    timetable
+  end
+
   def next!
     self.reference = self.next
   end
