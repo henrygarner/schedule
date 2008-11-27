@@ -22,7 +22,9 @@ class Schedule
     self.reference = time
   end
   
-  def matches?(time = time_without_seconds)
+  def matches?(time)
+    # We compare the time representations as arrays to eliminate mismatches
+    # due to sub-minute differences.
     time.to_a[1..5] == before(time).to_a[1..5]
   end
   alias_method :===, :matches?
@@ -35,7 +37,7 @@ class Schedule
   
   def after(time)
     self.cursor = time
-    scan! :direction => :up, :ignore_current => true
+    scan! :direction => :up, :skip_current => true
     cursor
   end
   
@@ -62,7 +64,7 @@ class Schedule
   def each
     self.cursor = reference
     yield cursor if matches? cursor
-    loop { yield next! }
+    loop { yield after cursor }
   end
   
   def while
@@ -118,22 +120,17 @@ class Schedule
    # and calls itself one level higher as before.
    # If no match is found within the current frame (eg hours will only match
    # in a subsequent or prior day), then the function calls itself 
-   # one level higher with 'should rollover' set to true.
+   # one level higher with 'skip current' set to true.
    # This causes the value one level up to be set to the next or previous value,
    # and all finer-grained quantities (eg hours and minutes) are
    # set to their minimum or maximum value.
-   # A match is always found at the year level and the function returns.
-   
-   # If months or years (level 3 or 4) are altered then the function
-   # calls itself back at level 2 (days) since a different month or year
-   # may cause the calendar days to require re-matching.
-   # This is accomplished with [level + 1, 2].min
+   # The function returns after years are processed.
 
    # level 0 = minutes, 1 = hours, 2 = days, 3 = months, 4 = years
    def scan!(options = {})
-     direction      = options[:direction] || :up
-     level          = options[:level].to_i
-     ignore_current = options[:ignore_current]
+     direction    = options[:direction] || :up
+     level        = options[:level].to_i
+     skip_current = options[:skip_current]
      
      return if level > 4
      
@@ -141,7 +138,7 @@ class Schedule
      matches              = time_methods[level].call
      matches = matches.reverse unless direction == :up
      
-     if ignore_current or not matches.include? cursor_array[level]
+     if skip_current or not matches.include? cursor_array[level]
        if found = matches.detect { |is| is.send comparison, cursor_array[level] }
          
          cursor_array[level] = found
@@ -149,12 +146,12 @@ class Schedule
          # since the days method will need to use these new values to calculate its response.
          (0...level).to_a.reverse.each { |i| cursor_array[i] = time_methods[i].call.send rollover }
          
-         scan! options.merge(:level => level + 1, :ignore_current => false)
+         scan! options.merge(:level => level + 1, :skip_current => false)
        else
-         scan! options.merge(:level => level + 1, :ignore_current => true)
+         scan! options.merge(:level => level + 1, :skip_current => true)
        end
      else
-       scan! options.merge(:level => level + 1, :ignore_current => false)
+       scan! options.merge(:level => level + 1, :skip_current => false)
      end
    end
 
@@ -186,7 +183,7 @@ class Schedule
    #   Matches 00:00 every Friday
    
    # Below function uses the position of the current cursor to create a Date object representing
-   # month and year. This provides the number of days in the month and the weekday of the first day
+   # month and year. This provides the number of days in the month and the weekday of the first day.
    # With these two facts we can construct an array of matching calendar days applying the logic given above.
 
    def days
@@ -194,7 +191,7 @@ class Schedule
      last_day = ((first_day >> 1) - 1).day
      weekday_adjustment = 1 - first_day.wday
      
-     [  ([0,7,14,21,28].collect do |week_adjustment|
+     [  ([0,7,14,21,28].map do |week_adjustment|
        
         # Loop through weeks turning the weekdays into calendar days by adding the week_adjustment
         # and weekday_adjustment. weekday_adjustment is 1 to -5 depending if the first weekday
@@ -202,7 +199,7 @@ class Schedule
         # since week day 1 is also calendar day 1. If month begins on Tuesday, adjustment is -1
         # since week day 2 is calendar day 1 etc.
         
-          weekdays.values.collect { |day| (day + week_adjustment + weekday_adjustment) % 35 }
+          weekdays.values.map { |day| (day + week_adjustment + weekday_adjustment) % 35 }
         end.flatten.select { |day| day >= 1 and day <= last_day } unless not monthdays.wildcard and weekdays.wildcard),
         
         (monthdays.values.select { |day| day >= 1 and day <= last_day } unless not weekdays.wildcard and monthdays.wildcard)
@@ -220,7 +217,6 @@ class Schedule
   class Field
     WEEKDAYS = %w(SUN MON TUE WED THU FRI SAT)
     
-    include Enumerable
     attr_reader :values, :wildcard
     
     def initialize(field, range)

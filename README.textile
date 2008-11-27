@@ -1,6 +1,6 @@
 h2. Abstract
 
-Schedule is a Ruby class which encapsulates a repeating schedule. Objects are initialized with a "Cron expression":http://en.wikipedia.org/wiki/Cron#crontab_syntax which powerfully specifies the mintes, hours, days, and months on which the schedule should repeat. Once initialized the object can be used to explore the schedule forwards and backwards in time.
+Schedule is a Ruby class which encapsulates a repeating schedule. Objects are initialized with a "Cron expression":http://en.wikipedia.org/wiki/Cron#crontab_syntax which powerfully specifies the minutes, hours, days, and months on which the schedule should repeat. Once initialized the object can be used to explore the schedule forwards and backwards in time.
 
 
 h2. Creating
@@ -93,16 +93,17 @@ You can also use several built-in loop constructs...
 	</code>
 </pre>
 
+These do not alter the reference. Don't forget to include a loop break condition!
 
 h2. Comparison
 
-You can check if a schedule matches the current time with the @matches?@ or @===@ methods.
+You can check if a schedule matches a time with the @matches?@, @matches_now?@ or @===@ methods.
 
 <pre>
 	<code>
 		>> schedule = Schedule.new '* * * 12 *'
 		
-		>> schedule.matches?
+		>> schedule.matches_now?
 		=> false
 		
 		>> schedule === Time.now
