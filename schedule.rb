@@ -61,23 +61,23 @@ class Schedule
     before reference
   end
 
-  def each
-    self.cursor = reference
+  def each(start_time = reference)
+    self.cursor = start_time
     yield cursor if matches? cursor
     loop { yield after cursor }
   end
   
-  def while
-    each { |time| break unless yield time }
+  def while(start_time = reference)
+    each(start_time) { |time| break unless yield time }
   end
   
-  def upto(end_time)
-    each { |time| time <= end_time ? yield(time) : break }
+  def upto(end_time, start_time = reference)
+    each(start_time) { |time| time <= end_time ? yield(time) : break }
   end
   
-  def timetable_upto(end_time)
+  def between(start_time, end_time)
     timetable = []
-    upto(end_time) { |time| timetable << time }
+    upto(end_time, start_time) { |time| timetable << time }
     timetable
   end
 

@@ -22,11 +22,16 @@ creates a new Schedule object which will match each hour between 8am and 5pm eve
 		=> Fri Nov 28 08:00:00 UTC 2008
 		
 		>> schedule.before 7.days.ago
-		=> Fri Nov 14 17:00:00 UTC 2008			
+		=> Fri Nov 14 17:00:00 UTC 2008
+		
+		>> schedule.between 1.month.ago, 1.week.from_now
+		=> [Fri Oct 31 08:00:00 UTC 2008, Fri Oct 31 09:00:00 UTC 2008, Fri Oct 31 10:00:00 UTC 2008 ... ]		
 	</code>
 </pre>
 
-Each Schedule object maintains an internal reference time. This is set to the creation time time by default but can be overridden at initialization by passing it as the second parameter or with the reference= method.
+
+
+Each Schedule object maintains an internal reference time. This is set to the creation time time by default but can be overridden at initialization by passing it as the second parameter or with the @reference=@ method.
 
 <pre>
 	<code>
@@ -42,9 +47,6 @@ Each Schedule object maintains an internal reference time. This is set to the cr
 
 		>> schedule.previous
 		=> Fri Jun 20 17:00:00 UTC 2008
-		
-		>> schedule.timetable_upto 2.months.ago
-		=> [Fri Jun 27 08:00:00 UTC 2008, Fri Jun 27 09:00:00 UTC 2008, Fri Jun 27 10:00:00 UTC 2008 ... ]
 	</code>
 </pre>
 
@@ -71,7 +73,7 @@ The @next!@ method returns the first match following the reference and sets the 
 	</code>
 </pre>
 
-You can also use several built-in loop constructs...
+You can also use several built-in loop constructs which leave the reference unaltered.
 
 <pre>
 	<code>
@@ -93,7 +95,8 @@ You can also use several built-in loop constructs...
 	</code>
 </pre>
 
-These do not alter the reference. Don't forget to include a loop break condition!
+Don't forget to include a loop break condition!
+The reference time is used as the start in each case. If you want to use a time other than the reference time, pass it in as the final argument. 
 
 h2. Comparison
 
