@@ -47,6 +47,9 @@ Each Schedule object maintains an internal reference time. This is set to the cr
 
 		>> schedule.previous
 		=> Fri Jun 20 17:00:00 UTC 2008
+		
+		>> schedule.upto 1.month.ago
+		=> [Fri Sep 26 08:00:00 UTC 2008, Fri Sep 26 09:00:00 UTC 2008, Fri Sep 26 10:00:00 UTC 2008 ... ]
 	</code>
 </pre>
 

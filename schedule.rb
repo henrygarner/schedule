@@ -72,7 +72,9 @@ class Schedule
   end
   
   def upto(end_time, start_time = reference)
-    each(start_time) { |time| time <= end_time ? yield(time) : break }
+    timetable = []
+    each(start_time) { |time| time <= end_time ? (block_given? ? yield(time) : timetable << time) : break }
+    timetable unless block_given?
   end
   
   def between(start_time, end_time)
