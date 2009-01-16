@@ -93,7 +93,7 @@ class Schedule
 
   private
   
-  attr_reader :weekdays, :monthdays
+  attr_reader :weekdays, :monthdays, :cursor_array
   
   def time_without_seconds(time = Time.now)
     time - time.sec
@@ -112,9 +112,8 @@ class Schedule
     @cursor_array = time.to_a[1..5]
   end
   
-  def cursor_array
-    @cursor_array
-  end
+  # Each element in time_methods must be a function which returns
+  # the permitted values for the corresponding element in the cursor array.
   
   def time_methods
     [method(:minutes), method(:hours), method(:days), method(:months), method(:years)]
