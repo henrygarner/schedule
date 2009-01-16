@@ -64,7 +64,7 @@ class Schedule
   def each(start_time = reference)
     self.cursor = start_time
     yield cursor if matches? cursor
-    loop { yield after cursor }
+    loop { yield after(cursor) }
   end
   
   def while(start_time = reference)
@@ -99,6 +99,11 @@ class Schedule
     time - time.sec
   end
   
+  
+  # Cursor is specified as an array or integers.
+  # This is partly for performance reasons and partly to allow
+  # the extension for years or seconds if required.
+  
   def cursor
     Time.gm @cursor_array[4], @cursor_array[3], @cursor_array[2], @cursor_array[1], @cursor_array[0]
   end
@@ -111,49 +116,53 @@ class Schedule
     @cursor_array
   end
   
-   # Recursive function to resolve cursor to the next or previous match.
-   # An array is used rather than a Time object for performance reasons.
-   # Starting at level 0 (minutes), function works its way up to level 4 (years).
+  def time_methods
+    [method(:minutes), method(:hours), method(:days), method(:months), method(:years)]
+  end
+  
+   # Loops once through the cursor array to resolve it to
+   # the subsequent or previous match.
    
    # If the current value at a given level matches, no action is taken
-   # and the function calls itself one level higher.
-   # If a match is found within the current frame (eg the same day if 
-   # searching for hours), the function replaces the value for the match
-   # and calls itself one level higher as before.
+   # and the loop continues at the next level.
+   #
+   # If the current value does not match, but the next match in sequence
+   # is available in the current frame (eg the same day if searching for hours),
+   # the function replaces the value with the next value in sequence
+   # and resets all finer-graned quantities to their maximum or minimum permitted value.
+   #
    # If no match is found within the current frame (eg hours will only match
-   # in a subsequent or prior day), then the function calls itself 
-   # one level higher with 'skip current' set to true.
-   # This causes the value one level up to be set to the next or previous value,
+   # in a subsequent or prior day), then the loop continues with 'should rollover' set to true.
+   # This causes the value one level up to be set to the next or previous value in sequence,
    # and all finer-grained quantities (eg hours and minutes) are
-   # set to their minimum or maximum value.
-   # The function returns after years are processed.
+   # set to their maximum or minimum values.
+   
+   # In each case the next value in sequence and whether to reset rollover values
+   # to the maximum or minimum is dictated by the direction (up or down). 
 
    # level 0 = minutes, 1 = hours, 2 = days, 3 = months, 4 = years
    def scan!(options = {})
-     direction    = options[:direction] || :up
-     level        = options[:level].to_i
-     skip_current = options[:skip_current]
+     direction       = options[:direction] || :up
+     should_rollover = (direction == :up)
+     find_next, rollover_reset = (direction == :up ? ['>','min'] : ['<','max'])
      
-     return if level > 4
-     
-     comparison, rollover = (direction == :up ? ['>','min'] : ['<','max'])
-     matches              = time_methods[level].call
-     matches = matches.reverse unless direction == :up
-     
-     if skip_current or not matches.include? cursor_array[level]
-       if found = matches.detect { |is| is.send comparison, cursor_array[level] }
-         
-         cursor_array[level] = found
-         # We set the cursor in reverse order so that months and years are altered first,
-         # since the days method will need to use these new values to calculate its response.
-         (0...level).to_a.reverse.each { |i| cursor_array[i] = time_methods[i].call.send rollover }
-         
-         scan! options.merge(:level => level + 1, :skip_current => false)
-       else
-         scan! options.merge(:level => level + 1, :skip_current => true)
-       end
-     else
-       scan! options.merge(:level => level + 1, :skip_current => false)
+     cursor_array.size.times do |level|
+       matches = time_methods[level].call
+       matches = matches.reverse unless direction == :up
+       
+       if should_rollover or not matches.include? cursor_array[level]
+          if found = matches.detect { |is| is.send find_next, cursor_array[level] }
+            cursor_array[level] = found
+            
+            # We set the cursor in reverse order so that months and years are altered first,
+            # since the days method will need to use these new values to calculate its response.
+            (0...level).to_a.reverse.each { |i| cursor_array[i] = time_methods[i].call.send rollover_reset }
+            
+            should_rollover = false
+          else
+            should_rollover = true
+          end
+        end
      end
    end
 
@@ -163,10 +172,6 @@ class Schedule
 
    def hours
      @hours.values
-   end
-
-   def months
-     @months.values
    end
 
    # There are two different ways of specifying days in Cron: by day of month (1-31) or day of week (0-6).
@@ -207,14 +212,14 @@ class Schedule
         (monthdays.values.select { |day| day >= 1 and day <= last_day } unless not weekdays.wildcard and monthdays.wildcard)
       ].flatten.compact.uniq.sort
    end
+   
+   def months
+     @months.values
+   end
 
    def years
      [cursor_array[4] - 1, cursor_array[4], cursor_array[4] + 1]
    end
-  
-  def time_methods
-    [method(:minutes), method(:hours), method(:days), method(:months), method(:years)]
-  end
   
   class Field
     WEEKDAYS = %w(SUN MON TUE WED THU FRI SAT)
