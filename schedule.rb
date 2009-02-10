@@ -16,8 +16,8 @@ class Schedule
     @months     = Field.new array[3], 1..12
     @weekdays   = Field.new array[4], 0..6
     
-    raise 'expression will never match' if weekdays.wildcard and [1,3,5,7,8,10,12].all? { |month| !months.include? month } and monthdays == [31]
-    raise 'expression will never match' if weekdays.wildcard and months == [2] and monthdays.all? { |day| day > 29 }
+    raise 'expression will never match' if weekdays.wildcard and [1,3,5,7,8,10,12].all? { |month| !months.values.include? month } and monthdays.values == [31]
+    raise 'expression will never match' if weekdays.wildcard and months.values == [2] and monthdays.values.all? { |day| day > 29 }
     
     self.reference = time
   end
